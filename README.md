@@ -13,7 +13,7 @@ Weave Camera Morph V1 is a Blender add-on that allows users to create smooth cam
 
 ## Installation
 
-1. Download the `weave-camera-morph_v1.py` file.
+1. Download the `weave-camera-morph_v1.py` file from the `src` directory.
 2. Open Blender and go to `Edit > Preferences > Add-ons`.
 3. Click on `Install...` and select the downloaded `weave-camera-morph_v1.py` file.
 4. Enable the add-on by checking the box next to "Weave Camera Morph V1".
