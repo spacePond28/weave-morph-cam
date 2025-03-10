@@ -1,6 +1,10 @@
 bl_info = {
-    "name": "Weave Camera Morph V1",
+    "name": "Weave Camera Morph",
+    "description": "Morph between multiple cameras smoothly.",
+    "author": "Weave Creative Limited",
+    "version": (1, 1, 0),
     "blender": (2, 80, 0),
+    "location": "View3D > Add > Camera > Add Morph Camera",
     "category": "Object",
 }
 
@@ -267,52 +271,58 @@ def interpolate_bezier(p0, p1, p2, t):
 
 def update_morph_camera(scene, context):
     obj = context.object
-    if obj and obj.type == 'CAMERA' and "is_morph_camera" in obj:
-        morph_list = obj.morph_list
-        if len(morph_list) < 2:
-            return
-        
-        slider_value = context.scene.morph_slider
-        total_cameras = len(morph_list)
-        
-        depsgraph = context.evaluated_depsgraph_get()
-        
-        for i in range(total_cameras - 1):
-            if slider_value >= i and slider_value <= i + 1:
-                t = slider_value - i
-                cam1 = morph_list[i].camera.evaluated_get(depsgraph)
-                cam2 = morph_list[i + 1].camera.evaluated_get(depsgraph)
-                
-                if cam1 and cam2:
-                    # Calculate the arc position using Bezier interpolation
-                    p0 = cam1.matrix_world.translation
-                    p2 = cam2.matrix_world.translation
-                    mid_point = (p0 + p2) / 2
-                    arc_offset = (p0 - p2).cross(Vector((0, 0, 1))).normalized() * context.object.arc_control * (1 - abs(2 * t - 1))
-                    p1 = mid_point + arc_offset
-                    
-                    obj.location = interpolate_bezier(p0, p1, p2, t)
-                    
-                    # Use world matrix to get the correct rotation
-                    rot1 = cam1.matrix_world.to_euler()
-                    rot2 = cam2.matrix_world.to_euler()
-                    obj.rotation_euler = rot1.to_quaternion().slerp(rot2.to_quaternion(), t).to_euler()
-                    
-                    obj.data.lens = cam1.data.lens * (1 - t) + cam2.data.lens * t
-                    
-                    # Morph additional camera attributes
-                    focus_distance1 = get_focus_distance(cam1)
-                    focus_distance2 = get_focus_distance(cam2)
-                    obj.data.dof.focus_distance = focus_distance1 * (1 - t) + focus_distance2 * t
-                    obj.data.dof.aperture_blades = int(cam1.data.dof.aperture_blades * (1 - t) + cam2.data.dof.aperture_blades * t)
-                    obj.data.dof.aperture_fstop = cam1.data.dof.aperture_fstop * (1 - t) + cam2.data.dof.aperture_fstop * t
-                    obj.data.dof.aperture_ratio = cam1.data.dof.aperture_ratio * (1 - t) + cam2.data.dof.aperture_ratio * t
-                    obj.data.dof.aperture_rotation = cam1.data.dof.aperture_rotation * (1 - t) + cam2.data.dof.aperture_rotation * t
-                    
-                    # Ensure DOF settings are applied correctly
-                    obj.data.dof.use_dof = cam1.data.dof.use_dof or cam2.data.dof.use_dof
-                    
+
+    # Ensure the object is valid and is a camera with the "is_morph_camera" property
+    if obj is None or obj.type != 'CAMERA' or "is_morph_camera" not in obj:
+        return
+
+    morph_list = obj.morph_list
+    if len(morph_list) < 2:
+        return
+
+    slider_value = context.scene.morph_slider
+    total_cameras = len(morph_list)
+
+    depsgraph = context.evaluated_depsgraph_get()
+    depsgraph.update()  # Ensure the dependency graph is up-to-date
+
+    for i in range(total_cameras - 1):
+        if slider_value >= i and slider_value <= i + 1:
+            t = slider_value - i
+            cam1 = morph_list[i].camera.evaluated_get(depsgraph)
+            cam2 = morph_list[i + 1].camera.evaluated_get(depsgraph)
+
+            if cam1 and cam2:
+                # Calculate the arc position using Bezier interpolation
+                p0 = cam1.matrix_world.translation
+                p2 = cam2.matrix_world.translation
+                mid_point = (p0 + p2) / 2
+                arc_offset = (p0 - p2).cross(Vector((0, 0, 1))).normalized() * context.object.arc_control * (1 - abs(2 * t - 1))
+                p1 = mid_point + arc_offset
+
+                obj.location = interpolate_bezier(p0, p1, p2, t)
+
+                # Use world matrix to get the correct rotation
+                rot1 = cam1.matrix_world.to_euler()
+                rot2 = cam2.matrix_world.to_euler()
+                obj.rotation_euler = rot1.to_quaternion().slerp(rot2.to_quaternion(), t).to_euler()
+
+                obj.data.lens = cam1.data.lens * (1 - t) + cam2.data.lens * t
+
+                # Morph additional camera attributes
+                focus_distance1 = get_focus_distance(cam1)
+                focus_distance2 = get_focus_distance(cam2)
+                obj.data.dof.focus_distance = focus_distance1 * (1 - t) + focus_distance2 * t
+                obj.data.dof.aperture_blades = int(cam1.data.dof.aperture_blades * (1 - t) + cam2.data.dof.aperture_blades * t)
+                obj.data.dof.aperture_fstop = cam1.data.dof.aperture_fstop * (1 - t) + cam2.data.dof.aperture_fstop * t
+                obj.data.dof.aperture_ratio = cam1.data.dof.aperture_ratio * (1 - t) + cam2.data.dof.aperture_ratio * t
+                obj.data.dof.aperture_rotation = cam1.data.dof.aperture_rotation * (1 - t) + cam2.data.dof.aperture_rotation * t
+
+                # Ensure DOF settings are applied correctly
+                obj.data.dof.use_dof = cam1.data.dof.use_dof or cam2.data.dof.use_dof
+
                 break
+
             
 def update_slider_range(scene):
     obj = bpy.context.object
@@ -328,12 +338,24 @@ def update_slider_range(scene):
                 max=total_cameras - 1,
                 update=update_morph_camera
             )
+           
 
 def frame_change_handler(scene):
-    update_morph_camera(scene, bpy.context)
+    try:
+        context = bpy.context
+        obj = context.object
+        if obj and obj.type == 'CAMERA' and "is_morph_camera" in obj:
+            update_morph_camera(scene, context)
+    except Exception as e:
+        print(f"Error in frame_change_handler: {e}")
 
 def draw_morph_camera_button(self, context):
     self.layout.operator(AddMorphCameraOperator.bl_idname, text="Add Morph Camera", icon='CAMERA_DATA')
+
+def load_handler(dummy):
+    bpy.app.handlers.frame_change_post.append(frame_change_handler)
+    update_slider_range(bpy.context.scene)
+    print("Frame change handler registered after file load.")
 
 def register():
     bpy.utils.register_class(AddMorphCameraOperator)
@@ -349,7 +371,7 @@ def register():
     bpy.utils.register_class(MorphCameraPanel)
     bpy.utils.register_class(MorphCameraViewportPanel)
     bpy.utils.register_class(MorphCameraProperties)
-    
+
     bpy.types.Object.morph_list = CollectionProperty(type=MorphListItem)
     bpy.types.Object.active_morph_camera_index = IntProperty()
     bpy.types.Object.arc_control = FloatProperty(
@@ -364,12 +386,14 @@ def register():
         description="Morph between selected cameras",
         default=0.0,
         min=0.0,
-        max=1.0,
+        max=1.0,  # Initial Max Value
         update=update_morph_camera
     )
 
     bpy.app.handlers.frame_change_post.append(frame_change_handler)
+    bpy.app.handlers.load_post.append(load_handler)
     bpy.types.VIEW3D_MT_camera_add.append(draw_morph_camera_button)
+    print("Addon Registered")
 
 def unregister():
     bpy.utils.unregister_class(AddMorphCameraOperator)
@@ -385,14 +409,22 @@ def unregister():
     bpy.utils.unregister_class(MorphCameraPanel)
     bpy.utils.unregister_class(MorphCameraViewportPanel)
     bpy.utils.unregister_class(MorphCameraProperties)
-    
-    del bpy.types.Object.morph_list
-    del bpy.types.Object.active_morph_camera_index
-    del bpy.types.Object.arc_control
-    del bpy.types.Scene.morph_slider
-    
-    bpy.app.handlers.frame_change_post.remove(frame_change_handler)
-    bpy.types.VIEW3D_MT_camera_add.remove(draw_morph_camera_button)
+
+    if hasattr(bpy.types.Object, "morph_list"):
+        del bpy.types.Object.morph_list
+    # ... (delete other properties) ...
+
+    if frame_change_handler in bpy.app.handlers.frame_change_post:
+        bpy.app.handlers.frame_change_post.remove(frame_change_handler)
+        print("Frame change handler unregistered")
+    if load_handler in bpy.app.handlers.load_post:
+        bpy.app.handlers.load_post.remove(load_handler)
+        print("load handler unregistered")
+
+    try:
+        bpy.types.VIEW3D_MT_camera_add.remove(draw_morph_camera_button)
+    except ValueError:
+        print("draw_morph_camera_button was not in VIEW3D_MT_camera_add")
 
 if __name__ == "__main__":
     register()
